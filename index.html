@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flores Amarillas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #ffd21f;
+    --glow: #ffb400;
+    --bg1: #1a1405;
+    --bg2: #000;
+    --font: 'Patrick Hand', 'Comic Sans MS', cursive;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #000; color: var(--gold); font-family: var(--font); }
+  body { background: radial-gradient(ellipse at 50% 100%, var(--bg1), var(--bg2) 70%); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+  #fx { pointer-events: none; }
+
+  /* ---------- Escena 1 y 2: título + conejito ---------- */
+  #intro { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 4vh; transition: opacity 1.4s ease; }
+  #intro.hide { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 1.4s ease, visibility 0s 1.4s; }
+  h1 { font-weight: 400; text-align: center; font-size: clamp(2rem, 7vw, 3.6rem); line-height: 1.15;
+       color: var(--gold);
+       text-shadow: 0 0 6px #fff6b0, 0 0 14px var(--gold), 0 0 32px var(--glow), 0 0 60px var(--glow);
+       opacity: 0; transform: translateY(-10px); transition: opacity 2s ease, transform 2s ease; }
+  #intro.on h1 { opacity: 1; transform: none; }
+  @keyframes pulse { 50% { text-shadow: 0 0 4px #fff6b0, 0 0 10px var(--gold), 0 0 22px var(--glow), 0 0 40px var(--glow); } }
+
+  #bunny { display: block; width: min(70vw, 320px); max-height: 46vh; object-fit: contain; height: auto; opacity: 0; transition: opacity 1.8s ease 0.6s; }
+  #intro.on #bunny { opacity: 1; }
+
+  #dedic { text-align: center; margin-top: -1vh; color: var(--gold); opacity: 0; transform: translateY(8px);
+           text-shadow: 0 0 6px #fff6b0, 0 0 14px var(--gold), 0 0 30px var(--glow), 0 0 54px var(--glow);
+           transition: opacity 1.4s ease .4s, transform 1.4s ease .4s; }
+  #intro.on #dedic { opacity: 1; transform: none; }
+  #dedic .amo { display: block; font-size: clamp(1.4rem, 5vw, 2.2rem); letter-spacing: .1em; }
+  #dedic .nom { display: block; margin-top: .15em; font-size: clamp(1.9rem, 7vw, 3.2rem); line-height: 1.1; }
+  #dedic .nom:empty { display: none; }
+
+  /* ---------- Escena 4: viaje entre palabras e imágenes ---------- */
+  #imgs { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  #imgs img { position: absolute; left: 0; top: 0; width: 240px; height: auto; opacity: 0;
+              transform-origin: center; will-change: transform, opacity; }
+
+  /* ---------- Música ---------- */
+  #sound { position: fixed; right: 14px; bottom: 14px; z-index: 20; width: 44px; height: 44px; border-radius: 50%;
+           background: rgba(0,0,0,.35); border: 1px solid rgba(255,210,31,.45); color: var(--gold);
+           font-size: 20px; line-height: 1; cursor: pointer; opacity: .75; transition: opacity .3s, background .3s;
+           -webkit-tap-highlight-color: transparent; }
+  #sound:hover, #sound:focus-visible { opacity: 1; background: rgba(255,210,31,.15); outline: none; }
+  #sound.hint { animation: hint 2s ease-in-out infinite; }
+  @keyframes hint { 50% { box-shadow: 0 0 0 8px rgba(255,210,31,.12), 0 0 16px rgba(255,180,0,.5); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #intro.on h1, #intro.on #bunny { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<!-- Escenas 1 y 2 -->
+<section id="intro">
+  <h1>Feliz Día de las<br>Flores Amarillas</h1>
+
+  <img id="bunny" src="assets/conejo.gif" alt="Conejitos con flores amarillas">
+
+  <p id="dedic"><span class="amo">TE AMO MUCHO</span><span class="nom" id="dedicNombre"></span></p>
+</section>
+
+<!-- Escena 4 -->
+<canvas id="field"></canvas>
+<div id="imgs"></div>
+<canvas id="fx"></canvas>
+
+<audio id="musica" src="assets/musica.m4a" loop preload="auto"></audio>
+<button id="sound" class="hint" type="button" aria-label="Activar música">🔇</button>
+
+
+
+<script>
+/* ====== CONFIGURA AQUÍ ====== */
+// Nombre de la persona: se cambia aquí, o sin tocar el código con el link  ...index.html?nombre=Ana
+const NOMBRE = '';   // vacío = "Para ti"
+const nombre = (new URLSearchParams(location.search).get('nombre') || NOMBRE).replace(/\s+/g, ' ').trim().slice(0, 24);
+const TITULO_PARTICULAS = nombre ? `Para ${nombre}` : 'Para ti';
+document.getElementById('dedicNombre').textContent = nombre;
+const MENSAJES = [
+  'Amor de mi vida', 'Te mereces todo', 'Te amo', 'Me encantas', 'Mi girasol', 'Mi flor favorita',
+  'Eres magia', 'Siempre tú', 'Brillas más que el sol', 'Mi persona favorita', 'Gracias por existir',
+  'Tú y yo', 'Mi razón de sonreír', 'Contigo todo', 'Eres mi lugar seguro', 'Mi todo',
+  'Eres lo mejor', 'Mi luz', 'Te elijo siempre', 'Eres mi paz', 'Mi mundo eres tú',
+  'Feliz día, mi amor', 'Mi pedacito de sol', 'Eres increíble'
+];
+if (nombre) MENSAJES.push(`Feliz día, ${nombre}`, `${nombre}, eres increíble`, `Para ti, ${nombre}`);
+const EMOJIS = ['💛', '🌻', '✨', '🌼', '🤍'];
+/* ============================ */
+
+const $ = s => document.querySelector(s);
+const rand = (a, b) => a + Math.random() * (b - a);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Estrellas ---------- */
+const sc = $('#stars'), sx = sc.getContext('2d');
+let stars = [];
+function sizeCanvas(c, ctx, maxDpr = 1) {
+  const dpr = Math.min(devicePixelRatio || 1, maxDpr);
+  c.width = innerWidth * dpr; c.height = innerHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function initStars() {
+  sizeCanvas(sc, sx);
+  const n = Math.round(innerWidth * innerHeight / 9000);
+  stars = Array.from({ length: n }, () => ({
+    x: rand(0, innerWidth), y: rand(0, innerHeight), r: rand(.4, 1.5), p: rand(0, 6.28), s: rand(.4, 1.6)
+  }));
+}
+function drawStars(t) {
+  sx.clearRect(0, 0, innerWidth, innerHeight);
+  sx.fillStyle = '#fff0be';
+  for (const s of stars) {
+    sx.globalAlpha = .35 + .55 * Math.abs(Math.sin(t / 1000 * s.s + s.p));
+    sx.fillRect(s.x, s.y, s.r * 1.6, s.r * 1.6);
+  }
+  sx.globalAlpha = 1;
+}
+
+/* ---------- Partículas ---------- */
+const fc = $('#fx'), fxx = fc.getContext('2d');
+let parts = [], mode = 'idle';
+
+function buildTargets() {
+  const off = document.createElement('canvas');
+  const W = off.width = Math.min(innerWidth, 900), H = off.height = 200;
+  const o = off.getContext('2d');
+  o.fillStyle = '#fff'; o.textAlign = 'center'; o.textBaseline = 'middle';
+  let fs = 150;
+  o.font = `${fs}px 'Patrick Hand', cursive`;
+  while (o.measureText(TITULO_PARTICULAS).width > W * .9) { fs -= 8; o.font = `${fs}px 'Patrick Hand', cursive`; }
+  o.fillText(TITULO_PARTICULAS, W / 2, H / 2);
+  const d = o.getImageData(0, 0, W, H).data, pts = [], step = innerWidth < 600 ? 4 : 5;
+  for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step)
+    if (d[(y * W + x) * 4 + 3] > 128) pts.push([x - W / 2 + innerWidth / 2, y - H / 2 + innerHeight / 2]);
+  return pts;
+}
+// Punto con brillo pre-dibujado: mucho más barato que shadowBlur en cada partícula
+const glow = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,245,170,1)'); gr.addColorStop(.35, 'rgba(255,205,30,.85)');
+  gr.addColorStop(1, 'rgba(255,160,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return c;
+})();
+function startParticles() {
+  sizeCanvas(fc, fxx, 1);
+  const cx = innerWidth / 2, cy = innerHeight / 2;
+  parts = buildTargets().map(([tx, ty]) => ({
+    x: cx + rand(-12, 12), y: cy + rand(-12, 12), tx, ty, vx: 0, vy: 0,   // nacen del centro
+    r: rand(2.2, 4.2), a: 0, wait: Math.floor(rand(0, 30))
+  }));
+  mode = 'gather';
+}
+function explode() {
+  mode = 'explode';
+  for (const p of parts) {
+    const ang = rand(0, 6.283), sp = rand(1, 7);
+    p.vx = Math.cos(ang) * sp; p.vy = Math.sin(ang) * sp;
+  }
+}
+function drawParts(t) {
+  fxx.clearRect(0, 0, innerWidth, innerHeight);
+  if (mode === 'idle') return;
+  let alive = 0;
+  fxx.globalCompositeOperation = 'lighter';
+  for (const p of parts) {
+    if (mode === 'gather') {
+      if (p.wait > 0) { p.wait--; continue; }
+      p.x += (p.tx - p.x) * .06 + Math.sin(t / 300 + p.tx) * .2;
+      p.y += (p.ty - p.y) * .06 + Math.cos(t / 300 + p.ty) * .2;
+      p.a = Math.min(1, p.a + .04);
+    } else if (mode === 'explode') {
+      p.x += p.vx; p.y += p.vy; p.vx *= .97; p.vy *= .97;
+      p.a -= .012;
+    }
+    if (p.a <= 0 && mode === 'explode') continue;
+    alive++;
+    fxx.globalAlpha = Math.max(p.a, 0);
+    fxx.drawImage(glow, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+  }
+  fxx.globalAlpha = 1; fxx.globalCompositeOperation = 'source-over';
+  if (mode === 'explode' && !alive) mode = 'idle';
+}
+
+/* ---------- Escena 4: viaje entre palabras e imágenes ---------- */
+// Cada elemento tiene una profundidad z (1 = lejos, 0 = encima de la cámara). Va acercándose
+// y sale hacia los lados creciendo, como en el video.
+const IMGS = ['img01.png','img02.png','img03.png','img04.gif','img05.gif','img06.png','img07.png',
+              'img08.png','img09.png','img10.png'].map(n => 'assets/imagenes/' + n);
+const fld = $('#field'), fctx = fld.getContext('2d'), imgBox = $('#imgs');
+const K = .25, Z_NEAR = .11, SPEED = reduced ? .035 : .11;
+let field = [], fieldAlpha = 0, fieldTarget = 0, fieldLast = 0, shoot = null, nextShoot = 0, unit = 1;
+const sprites = new Map();
+
+function sprite(text) {
+  if (sprites.has(text)) return sprites.get(text);
+  const c = document.createElement('canvas'), g = c.getContext('2d'), fs = 64;
+  g.font = `${fs}px 'Patrick Hand', cursive`;
+  const w = Math.ceil(g.measureText(text).width) + 40, h = fs + 40;
+  c.width = w; c.height = h;
+  g.font = `${fs}px 'Patrick Hand', cursive`; g.textBaseline = 'middle';
+  g.shadowColor = '#ffa800'; g.shadowBlur = 16; g.fillStyle = '#ffd21f'; g.fillText(text, 20, h / 2);
+  g.shadowBlur = 0; g.fillStyle = '#ffe98a'; g.fillText(text, 20, h / 2);
+  const sp = { c, w, h }; sprites.set(text, sp); return sp;
+}
+function randomWord() {
+  const t = MENSAJES[Math.floor(rand(0, MENSAJES.length))];
+  return sprite(Math.random() < .55 ? t + ' ' + EMOJIS[Math.floor(rand(0, EMOJIS.length))] : t);
+}
+function place(it, far) {
+  const ang = rand(0, 6.283), r = it.kind === 'i' ? rand(.35, 1.5) : rand(.2, 2.1);
+  it.wx = Math.cos(ang) * r; it.wy = Math.sin(ang) * r * .85;
+  it.z = far ? rand(.9, 1.05) : rand(.2, 1);
+  it.o = rand(.6, 1);
+  if (it.kind === 't') it.sp = randomWord();
+}
+function initField() {
+  sizeCanvas(fld, fctx, 1.5);
+  unit = Math.max(.6, Math.min(1.25, Math.min(innerWidth, innerHeight) / 720));
+  imgBox.innerHTML = ''; field = [];
+  const nWords = innerWidth < 600 ? 22 : 36;
+  for (let i = 0; i < nWords; i++) { const it = { kind: 't' }; place(it, false); field.push(it); }
+  IMGS.forEach(src => {
+    const el = new Image(); el.src = src; el.alt = ''; imgBox.appendChild(el);
+    const it = { kind: 'i', el }; place(it, false); it.z = rand(.25, 1); field.push(it);
+  });
+}
+const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+function updateField(t) {
+  const dt = Math.min((t - fieldLast) / 1000 || 0, .05); fieldLast = t;
+  if (!field.length || (fieldAlpha <= 0 && fieldTarget <= 0)) return;
+  fieldAlpha += Math.sign(fieldTarget - fieldAlpha) * Math.min(Math.abs(fieldTarget - fieldAlpha), dt / 2.5);
+  const W = innerWidth, H = innerHeight, cx = W / 2, cy = H / 2;
+  fctx.clearRect(0, 0, W, H);
+  for (const it of field) {
+    it.z -= SPEED * dt * (it.kind === 'i' ? .85 : 1);
+    const s = K / it.z, sx = cx + it.wx * cx * s, sy = cy + it.wy * cy * s;
+    const half = (it.kind === 'i' ? 130 : (it.sp.w * .35)) * s * unit;
+    if (it.z < Z_NEAR || sx < -half || sx > W + half || sy < -half || sy > H + half) { place(it, true); continue; }
+    it.a = fieldAlpha * it.o * ease((1 - it.z) / .12) * ease((it.z - Z_NEAR) / .1);
+  }
+  field.sort((a, b) => b.z - a.z);
+  for (const it of field) {
+    const s = K / it.z, sx = cx + it.wx * cx * s, sy = cy + it.wy * cy * s;
+    if (it.kind === 't') {
+      const w = it.sp.w * s * .7 * unit, h = it.sp.h * s * .7 * unit;
+      fctx.globalAlpha = it.a || 0;
+      fctx.drawImage(it.sp.c, sx - w / 2, sy - h / 2, w, h);
+    } else {
+      it.el.style.opacity = it.a || 0;
+      it.el.style.transform = `translate3d(${sx - 120}px, ${sy - 100}px, 0) scale(${s * unit})`;
+    }
+  }
+  fctx.globalAlpha = 1;
+  // estrella fugaz
+  if (fieldAlpha > .3) {
+    if (!shoot && t > nextShoot) {
+      shoot = { x: rand(W * .4, W), y: rand(0, H * .4), l: 0 }; nextShoot = t + rand(2500, 5500);
+    }
+    if (shoot) {
+      shoot.l += dt * 1.6; const k = shoot.l, len = 150 * unit;
+      const x = shoot.x - k * 520, y = shoot.y + k * 520;
+      const g = fctx.createLinearGradient(x, y, x + len, y - len);
+      g.addColorStop(0, 'rgba(255,240,200,0)'); g.addColorStop(1, `rgba(255,240,200,${.7 * Math.sin(Math.min(k, 1) * 3.14)})`);
+      fctx.strokeStyle = g; fctx.lineWidth = 1.5;
+      fctx.beginPath(); fctx.moveTo(x, y); fctx.lineTo(x + len, y - len); fctx.stroke();
+      if (k >= 1) shoot = null;
+    }
+  }
+}
+function stopField() { fieldAlpha = 0; fieldTarget = 0; shoot = null; fctx.clearRect(0, 0, innerWidth, innerHeight); }
+
+/* ---------- Música ---------- */
+// Al abrir, la página arranca con el osito y se intenta reproducir la música con sonido. Si el navegador lo
+// bloquea (política de autoplay), entra con el primer toque en cualquier parte, ya sincronizada: el salto fuerte
+// de la canción cae en el estallido de partículas (9 s).
+const audio = $('#musica'), soundBtn = $('#sound');
+const VOLUMEN = 1;   // 0 a 1
+let musicStarted = false, t0 = performance.now(), fadeId = 0;
+function fadeVolume(to, ms) {
+  cancelAnimationFrame(fadeId);
+  const from = audio.volume, start = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - start) / ms); audio.volume = from + (to - from) * k;
+    if (k < 1) fadeId = requestAnimationFrame(step);
+  };
+  fadeId = requestAnimationFrame(step);
+}
+function setSoundIcon() {
+  const on = musicStarted && !audio.muted && !audio.paused;
+  soundBtn.textContent = on ? '🔊' : '🔇';
+  soundBtn.setAttribute('aria-label', on ? 'Silenciar música' : 'Activar música');
+  soundBtn.classList.toggle('hint', !musicStarted);
+}
+function startMusic() {
+  if (musicStarted) return;
+  const pos = (performance.now() - t0) / 1000;
+  audio.volume = 0; audio.muted = false;
+  audio.play().then(() => {
+    musicStarted = true;
+    if (isFinite(audio.duration) && pos < audio.duration - 8) audio.currentTime = pos;
+    fadeVolume(VOLUMEN, 1200); setSoundIcon();
+  }).catch(() => {});
+}
+function onGesture(e) {
+  if (musicStarted || e.target === soundBtn) return;
+  startMusic();
+}
+['pointerup', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, onGesture, { passive: true }));
+soundBtn.addEventListener('click', () => {
+  if (!musicStarted) { startMusic(); return; }
+  audio.muted = !audio.muted; setSoundIcon();
+});
+document.addEventListener('visibilitychange', () => {
+  if (!musicStarted) return;
+  if (document.hidden) audio.pause(); else audio.play().catch(() => {});
+  setSoundIcon();
+});
+
+/* ---------- Línea de tiempo ---------- */
+let timers = [];
+const at = (ms, fn) => timers.push(setTimeout(fn, reduced ? ms / 3 : ms));
+function play() {
+  timers.forEach(clearTimeout); timers = []; t0 = performance.now();
+  const intro = $('#intro');
+  intro.className = ''; mode = 'idle';
+  stopField(); initField();
+
+  at(300,   () => intro.classList.add('on'));       // 1) título + conejo (conejo.gif)
+  at(4000,  () => intro.classList.add('hide'));    // a los 4 s pasa a la escena 3
+  at(5000,  () => { startParticles(); fieldTarget = .5; });   // 3) partículas forman el texto; al fondo asoman las palabras
+  at(9000,  () => { explode(); fieldTarget = 1; });          // 4) explotan y empieza el viaje entre palabras e imágenes
+}
+
+/* ---------- Bucle y arranque ---------- */
+let lastStars = 0;
+function frame(t) {
+  if (t - lastStars > 66) { drawStars(t); lastStars = t; }   // estrellas a ~15 fps
+  updateField(t); drawParts(t); requestAnimationFrame(frame);
+}
+addEventListener('resize', () => { initStars(); sizeCanvas(fc, fxx, 1); initField(); });
+initStars(); requestAnimationFrame(frame);
+
+// Al abrir la página siempre arranca desde el osito
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+  play();
+  audio.volume = 0;
+  audio.play().then(() => {                     // el navegador permite sonido automático
+    musicStarted = true; fadeVolume(VOLUMEN, 1200); setSoundIcon();
+  }).catch(() => {});                           // bloqueado: la música entra con el primer toque
+});
+</script>
+</body>
+</html>
